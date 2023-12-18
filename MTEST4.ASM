@@ -719,30 +719,20 @@ vbase:	dw	vbase	;this gets modified when the code
 ;* Null-terminated strings
 ;* nulls after CRLF have parity bit set
 ;**************************************************************
-pasmsg:	FCC	"PASS:"
-	db	0
-somsg:	FCC	"680 MTEST 1.4"
-	db	CR,LF,80H
-	FCC	"BY M. EBERHARD"	;fall into crmsg
-crmsg:	db	CR,LF,80H,0
-camsg:	FCC	"CODE ADDR (>00FF)? "
-	db	0
-samsg:	FCC	"BEG ADDR? "
-	db	0
-eamsg:	FCC	"END ADDR? "
-	db	0
-rngmsg:	FCC	"MTEST:"
-	db	0
-errms1:	FCC	"ERR AT"
-	db	0
-errms2:	FCC	" WROTE:"
-	db	0
-errms3:	FCC	" READ:"
-	db	0
-donmsg:	FCC	" ERRORS"	;fall into nulmsg
-nulmsg:	db	80H,80H,0	;nulls protect for ACIA RESET
-mormsg:	FCC	"> "
-	db	0
+pasmsg:	db	"PASS:", 0
+somsg:	db	"680 MTEST 1.4", CR, LF, 80H
+	db	"BY M. EBERHARD"	;fall into crmsg
+crmsg:	db	CR, LF, 80H, 0
+camsg:	db	"CODE ADDR (>00FF)? ", 0
+samsg:	db	"BEG ADDR? ", 0
+eamsg:	db	"END ADDR? ", 0
+rngmsg:	db	"MTEST:", 0
+errms1:	db	"ERR AT", 0
+errms2:	db	" WROTE:", 0
+errms3:	db	" READ:", 0
+donmsg:	db	" ERRORS"	;fall into nulmsg
+nulmsg:	db	80H, 80H, 0	;nulls protect for ACIA RESET
+mormsg:	db	"> ", 0
 
 ;**************************************************************
 ;* Test pattern sequence, a prime number in length
