@@ -46,16 +46,15 @@
 ;  bits, and even catch some longer-term memory loss faults.
 ;
 ; Program Notes:
-; * Written to assemble with PseudoCode's A68.com, a DOS-based cross
-;   assembler for the MC6800
-; * A68.com vers. 1.2.02 assembles 'jsr' incorrectly. to fix, patch
-;   A68.com address AFABh to be 8Dh (was 9Dh).
-; * A68.com does not generate 'direct' versions of lda and sta. We
-;   generate them the hard way (with .db) here.
+; * Ported to assemble with a modified version of Warren C. Colley III's
+;   A68 cross-assembler. MFE's original version was written to assemble with
+;   PseudoCode's A68.com, a DOS-based cross assembler for the MC6800
+; * Porting to A68 removed the workarounds for bugs in the PseudoCode assembler
 ;*  This program uses several I/O routines in the PROM monitor, and
 ;   is therefore dependant on the standard Altair PROM monitor being
 ;   present. (See 'PROM monitor entry points' below.)
-; * This program uses no page-0 memory, so that page 0 can be tested.
+; * This program uses no page-0 memory, so that page 0 can be tested; however,
+;   the MITS PROM monitor does need a few page 0 locations for I/O.
 ; * The main program is completely relocatable -- it relocates itself
 ;   to an address specified by the user, so that all of memory can be
 ;   tested. We pay a high performance and code-size penalty for
@@ -65,14 +64,14 @@
 ;
 ; TO DO
 ; * Replace PROM Mon's 'INCH' routine so we can relocate to page 0.
-;   Note that 'INCH' use 'echo' in page 0.
+;   Note that 'INCH' use 'ECHO' in page 0.
 ;
 ;********************************************************************
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Program Equates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-MAXERS	equ	64	;max number of errors before we quit
+MAXERS	equ	64		;max number of errors before we quit
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;ASCII Equates
@@ -80,16 +79,6 @@ MAXERS	equ	64	;max number of errors before we quit
 CTRLC	equ	03H		;control C
 CR	equ	0DH		;carriage return
 LF	equ	0AH		;line feed
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;6800 Equates
-;
-;There used to be a lot more of these, as Martin was working
-;around an assembler that didn't support direct addressing
-;for a bunch of instructions. SKIP2 may not be used in this
-;program anymore.
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-SKIP2	equ	8CH		;CPX instruction for SKIP2 trick
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;PROM Monitor Equates
