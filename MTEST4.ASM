@@ -186,7 +186,7 @@ getca:	ldab	#camsg-vbase	;ask for code address
 
 ; Compute vbase for post-move code
 
-	adda	#(vbase-mtest)%h'100
+	adda	#(vbase-mtest) MOD 0100H
 	STAA	mvbase+1
 	adcb	#(vbase-mtest)/256
 	STAB	mvbase
@@ -322,12 +322,12 @@ inhex:	jsr	INCH	;get a chr
 	beq	abort
 
 	subb	#'0'	;convert ASCII number to hex
-	cmpb	#h'09
+	cmpb	#09H
 	ble	hexdon	;done already?
-	cmpb	#h'11
+	cmpb	#11H
 	bmi	hexerr	;not hex 
-	subb	#h'07	;convert ASCII letter to hex
-	cmpb	#h'0f
+	subb	#07H	;convert ASCII letter to hex
+	cmpb	#0fH
 	ble	hexdon	;good hex: branch
 
 hexerr:	inc	errcnt-vbase,x	;flag error
@@ -456,7 +456,7 @@ stklp:	inx
 
 	clr	pflag-vbase,x	;we need to print 'pass'
 	clr	passno-vbase,x	;start with pass number 0
-	ldaa	#patlen+1	;initial pattern start
+	ldaa	#PATLEN+1	;initial pattern start
 	staa	pxstrt-vbase,x
 
 ; fall into nxtpas
@@ -500,7 +500,7 @@ nxtpas:	ldaa	tstart-vbase,x	;set memory pointer to the
 nxtbyt:	ldaa	pxptr-vbase,x	;point to pattern entry
 	deca
 	bne	fltst1		;modulo bump
-	ldaa	#patlen
+	ldaa	#PATLEN
 fltst1:	staa	pxptr-vbase,x
 
 ; Get pattern entry the hard way
@@ -631,7 +631,7 @@ memerr:	bsr	getvb		;get address of 'vbase'
 	psha			;expected data onto stack
 
 	inc	errcnt-vbase,x	;too many errors?
-	ldab	#maxers		;max allowed errors
+	ldab	#MAXERS		;max allowed errors
 	cmpb	errcnt-vbase,x
 	beq	erdone		;quit if so
 
@@ -711,57 +711,67 @@ exit:	bsr	printc		;print with preceeding CR LF
 ;* rest of the code location-independent
 ;* On exit: x=vbase
 ;**************************************************************
-getvb:	.db	h'ce	;ldx immediate
-vbase:	.dw	vbase	;this gets modified when the code
+getvb:	FCB	0CEH	;ldx immediate
+vbase:	FDB	vbase	;this gets modified when the code
 	rts		;...gets moved
 
 ;**************************************************************
 ;* Null-terminated strings
 ;* nulls after CRLF have parity bit set
 ;**************************************************************
-pasmsg:	FCC	"PASS:",0
-somsg:	.db	"680 MTEST 1.4"
-	.db	CR,LF,h'80,"BY M. EBERHARD"	;fall into crmsg
-crmsg:	.db	CR,LF,h'80,0
-camsg:	.db	"CODE ADDR (>00FF)? ",0
-samsg:	.db	"BEG ADDR? ",0
-eamsg:	.db	"END ADDR? ",0
-rngmsg:	.db	"MTEST:",0
-errms1:	.db	"ERR AT",0
-errms2:	.db	" WROTE:",0
-errms3:	.db	" READ:",0
-donmsg:	.db	" ERRORS"	;fall into nulmsg
-nulmsg:	.db	h'80,h'80,0	;nulls protect for ACIA RESET
-mormsg:	.db	"> ",0
+pasmsg:	FCC	"PASS:"
+	FCB	0
+somsg:	FCC	"680 MTEST 1.4"
+	FCB	CR,LF,80H
+	FCC	"BY M. EBERHARD"	;fall into crmsg
+crmsg:	FCB	CR,LF,80H,0
+camsg:	FCC	"CODE ADDR (>00FF)? "
+	FCB	0
+samsg:	FCC	"BEG ADDR? "
+	FCB	0
+eamsg:	FCC	"END ADDR? "
+	FCB	0
+rngmsg:	FCC	"MTEST:"
+	FCB	0
+errms1:	FCC	"ERR AT"
+	FCB	0
+errms2:	FCC	" WROTE:"
+	FCB	0
+errms3:	FCC	" READ:"
+	FCB	0
+donmsg:	FCC	" ERRORS"	;fall into nulmsg
+nulmsg:	FCB	80H,80H,0	;nulls protect for ACIA RESET
+mormsg:	FCC	"> "
+	FCB	0
 
 ;**************************************************************
 ;* Test pattern sequence, a prime number in length
 ;* Designed to cause a lot of bit-flipping and to catch
 ;* any bit-coupling and address-coupling problems
 ;**************************************************************
-patrn:	.db	h'01,h'fe,h'02,h'fd,h'04,h'fb,h'08,h'f7
-	.db	h'10,h'ef,h'20,h'fd,h'40,h'bf,h'80,h'7f
-	.db	h'00,h'ff,h'55,h'aa,h'33,h'cc,h'f0,h'0f
-	.db	h'c3,h'3c,h'66,h'99,h'78
-patend:	.db	h'01		;wrap pattern one byte
+patrn:	FCB	001H, 0FEH, 002H, 0FDH, 004H, 0FBH, 008H, 0F7H
+	FCB	010H, 0EFH, 020H, 0FDH, 040H, 0BFH, 080H, 07FH
+	FCB	000H, 0FFH, 055H, 0AAH, 033H, 0CCH, 0F0H, 00FH
+	FCB	0C3H, 03CH, 066H, 099H, 078H
+patend:	FCB	01H		;wrap pattern one byte
 	
-	.equ	patlen,patend-patrn
+PATLEN	equ	patend-patrn
 
 ;**************************************************************
 ;* RAM variables not in page 0, so that we can test page 0 RAM
 ;**************************************************************
 
-	.rs	15	;reserve space for stack
-stack:	.rs	1	;needs to be before RAM variables
+	RMB	15	;reserve space for stack
+stack:	RMB	1	;needs to be before RAM variables
 
-tstart:	.rs	2	;first memory address to test
-pxstrt:	.rs	1	;pattern starting point
-tptr:	.rs	2	;current memory test location
-pxptr:	.rs	1	;current place in pattern
-tend:	.rs	2	;last memory address to test
-errcnt:	.rs	1	;error count
-pflag:	.rs	1	;0 means we need to print 'pass'
-passno:	.rs	1	;current pass number
+tstart:	RMB	2	;first memory address to test
+pxstrt:	RMB	1	;pattern starting point
+tptr:	RMB	2	;current memory test location
+pxptr:	RMB	1	;current place in pattern
+tend:	RMB	2	;last memory address to test
+errcnt:	RMB	1	;error count
+pflag:	RMB	1	;0 means we need to print 'pass'
+passno:	RMB	1	;current pass number
 
 ;**************************************************************
 ;* Little Code Mover
@@ -780,8 +790,8 @@ passno:	.rs	1	;current pass number
 ;* initialize these two variables while we install the mover
 
 
-mover:	.dw	movend-mtest	;this initializes mcount
-	.dw	movend-mtest-1	;this initializes mtlen
+mover:	FDB	movend-mtest	;this initializes mcount
+	FDB	movend-mtest-1	;this initializes mtlen
 
 movlup:	ldx	msourc	;get a source byte
 	ldaa	0,x
