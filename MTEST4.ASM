@@ -63,76 +63,77 @@
 ;   that the bsr's reach, and everything remains relocatable.
 ;
 ; TO DO
-; * Replace PROM Mon's 'inch' routine so we can relocate to page 0.
-;   Note that 'inch' use 'echo' in page 0.
+; * Replace PROM Mon's 'INCH' routine so we can relocate to page 0.
+;   Note that 'INCH' use 'echo' in page 0.
 ;
 ;********************************************************************
-;**
-;* Program Equates
-;**
-	.equ	maxers,64	;max number of errors before we quit
-;**
-;* ASCII equates
-;**
-	.equ	CTRLC,h'03	;control C
-	.equ	CR,h'0d		;carriage return
-	.equ	LF,h'0a		;line feed
-;**
-;* 6800 equates
-;**
-	.equ	SKIP2,h'8c	;CPX instruction for SKIP2 trick
-;stupid assembler can't do direct addressing for some instructions
-	.equ	ldaad,h'96	;ldaa direct
-	.equ	ldabd,h'd6	;ldab direct
-	.equ	staad,h'97	;staa direct
-	.equ	stabd,h'd7	;stab direct
-	.equ	addad,h'9b	;adda direct
-	.equ	adcad,h'99	;adca direct
-	.equ	subad,h'90	;suba direct
-	.equ	sbcad,h'92	;sbca direct
-	.equ	subbd,h'd0	;subb direct
-	.equ	sbcbd,h'd2	;sbcd direct
-;**
-;* PROM Monitor entry points
-;**
-	.equ	inch,h'ff00	;get chr in b
-	.equ	out2h,h'ff6d	;print a in hex, clobber b
-	.equ	outch,h'ff81	;print chr in b on console
-	.equ	outs,h'ff82	;print a space on the console
-	.equ	reset,h'ffd8	;cold start
-	.equ	echo,h'f3	;PROM monitor echo flag
 
-;**************************************************************
-;* Disable echo during load
-;**************************************************************
-	.org	echo
-	.db	h'80
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Program Equates
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MAXERS	equ	64	;max number of errors before we quit
 
-;**************************************************************
-;* page 0 variables for mover
-;**************************************************************
-	.org 0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;ASCII Equates
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CTRLC	equ	03H		;control C
+CR	equ	0DH		;carriage return
+LF	equ	0AH		;line feed
 
-mdest:	.rs	2		;destination address
-msourc:	.rs	2		;source address
-mtstrt:	.rs	2		;mtest start address for user
-mvbase:	.rs	2		;new vbase
-	.rs	1		;stack space for 1 bsr
-mstack:	.rs	1		;initial stack pointer address
-gotoa:	.rs	2		;this is actually on the stack
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;6800 Equates
+;
+;There used to be a lot more of these, as Martin was working
+;around an assembler that didn't support direct addressing
+;for a bunch of instructions. SKIP2 may not be used in this
+;program anymore.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SKIP2	equ	8CH		;CPX instruction for SKIP2 trick
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PROM Monitor Equates
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+INCH	equ	0FF00H		;get chr in b
+OUT2H	equ	0FF6DH		;print a in hex, clobber b
+OUTCH	equ	0FF81H		;print chr in b on console
+OUTS	equ	0FF82H		;print a space on the console
+RESET	equ	0FFD8H		;cold start
+ECHO	equ	0F3H		;PROM monitor echo flag
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Start of actual object code
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	CPU	6800		;Use only M6800 opcodes
+
+	ORG	ECHO		;Disable echo during loading
+	FCB	80H
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Page 0 variables for mover
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ORG	0
+
+mdest:	RMB	2		;destination address
+msourc:	RMB	2		;source address
+mtstrt:	RMB	2		;mtest start address for user
+mvbase:	RMB	2		;new vbase
+	RMB	1		;stack space for 1 bsr
+mstack:	RMB	1		;initial stack pointer address
+gotoa:	RMB	2		;this is actually on the stack
 
 ; The following variables must be in this order, before exemov
 ; becasue they get initialized when the mover is installed
 
 mmdest:
-mcount:	.rs	2		;bytes of code
-mtlen:	.rs	2		;mtest ofset to last byte
+mcount:	RMB	2		;bytes of code
+mtlen:	RMB	2		;mtest ofset to last byte
 exemov:				;execution address for mover
 
-;**************************************************************
-;* MTEST Start of Execution
-;**************************************************************
-	.org	h'0100		;start out low in ram
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;MTEST start of execution
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ORG	0100H		;start out low in ram
 
 mtest:	sei			;mask interrupts
 
@@ -171,8 +172,8 @@ getbeg:	pulb			;pull PC high byte
 	pula			;pull PC low byte
 	suba	#getbeg-mtest	;correct for above code
 	sbcb	#0		;borrow
-	.db	staad,msourc+1	;save low byte
-	.db	stabd,msourc	;save high byte
+	STAA	msourc+1	;save low byte
+	STAB	msourc	;save high byte
 
 ; Ask user where we should put the code. Make sure the address is
 ; not in page 0, where our little mover and the 'echo' flag are
@@ -186,9 +187,9 @@ getca:	ldab	#camsg-vbase	;ask for code address
 ; Compute vbase for post-move code
 
 	adda	#(vbase-mtest)%h'100
-	.db	staad,mvbase+1
+	STAA	mvbase+1
 	adcb	#(vbase-mtest)/256
-	.db	stabd,mvbase
+	STAB	mvbase
 
 ; Remember the code start address for later reporting and testing
 
@@ -211,10 +212,10 @@ gotolp:	inx			;loop: compute x=x+b
 ; b=1 for reverse (mdest>msourc)
 ; This will do the copy even if msourc=mdest
 
-	.db	ldaad,msourc+1	;lsb compare
-	.db	subad,mdest+1
-	.db	ldaad,msourc	;msb compare
-	.db	sbcad,mdest
+	LDAA	msourc+1	;lsb compare
+	SUBA	mdest+1
+	LDAA	msourc	;msb compare
+	SBCA	mdest
 	bcc	mcopy	;source is larger address. copy forward
 
 ; copy backward - first need to compute end addresses
@@ -256,16 +257,16 @@ getadr:	pshb		;save string in in a case of bad input
 	clr	errcnt-vbase,x	;no hex errors yet
 
 	bsr	in2hex		;get high byte into tend
-	.db	staad,mdest
+	STAA	mdest
 	bsr	in2hex		;get low byte into tend+1
-	.db	staad,mdest+1	;...and into a
+	STAA	mdest+1		;...and into a
 
 	pulb			;recover ask msg pointer
 
 	tst	errcnt-vbase,x	;any errors with hex input?
 	bne	getadr
 
-	.db	ldabd,mdest	;set up b, Z for return
+	LDAB	mdest	;set up b, Z for return
 	rts
 
 ;**************************************************************
@@ -282,10 +283,10 @@ prntc2:	bra	prntc1
 ;*    x unchanged. trashes a
 ;**************************************************************
 addlen:	ldaa	1,x	;low byte
-	.db	addad,mtlen+1
+	ADDA	mtlen+1
 	staa	1,x
 	ldaa	0,x	;high byte + carry
-	.db	adcad,mtlen
+	ADCA	mtlen
 	staa	0,x
 	rts
 
@@ -316,7 +317,7 @@ in2hex:	bsr	inhex	;get 1st hex nibble into b
 ;* if bad hex digit, inc errcnt, a,b=garbage
 ;* Control-C aborts to the PROM monitor
 ;**
-inhex:	jsr	inch	;get a chr
+inhex:	jsr	INCH	;get a chr
 	cmpb	#CTRLC	;abort?
 	beq	abort
 
@@ -334,7 +335,7 @@ hexerr:	inc	errcnt-vbase,x	;flag error
 hexdon:	aba		;combine with high digit in a
 	rts
 
-abort:	jmp	reset
+abort:	jmp	RESET
 
 ;**************************************************************
 ; subroutine to print the address range of this program, and
@@ -395,18 +396,18 @@ gparm2:	ldab	#samsg-vbase		;'start address?'
 
 ; See if tstart>mcount (which is the last code address now)
 
-	.db	ldaad,mcount+1
+	LDAA	mcount+1
 	suba	tstart-vbase+1,x
-	.db	ldaad,mcount
+	LDAA	mcount
 	sbca	tstart-vbase,x
 	bcs	gparm3		;test mem is above code
 	
 ; make sure mtstrt>tend (test mem is below code)
 
 	ldaa	tend-vbase+1,x
-	.db	subad,mtstrt+1
+	SUBA	mtstrt+1
 	ldaa	tend-vbase,x
-	.db	sbcad,mtstrt
+	SBCA	mtstrt
 	bcc	gparm1		;overlap error
 
 gparm3:	rts
@@ -422,13 +423,13 @@ prntc1:	bra	printc
 ;* a space. This subroutine cannot be used during the actual
 ;* memory test.
 ;**************************************************************
-outadr:	jsr	outs		;print leading space
+outadr:	jsr	OUTS		;print leading space
 
 	ldaa	0,x		;high byte
 	bsr	outahx
 	ldaa	1,x		;low byte
 
-outahx:	jmp	out2h		;use PROM monitor routine
+outahx:	jmp	OUT2H		;use PROM monitor routine
 
 ;**************************************************************
 ;* Initialize variables for the actual memory test
@@ -610,7 +611,7 @@ xplusb:	inx			;count x register up
 printx:	ldab	0,x		;get a string byte
 	beq	getvb		;null: exit through getvb
 	inx			;next
-	jsr	outch		;PROM: print chr in b
+	jsr	OUTCH		;PROM: print chr in b
 	bra	printx
 
 ;**************************************************************
@@ -640,7 +641,7 @@ memerr:	bsr	getvb		;get address of 'vbase'
 	bsr	printc
 
 	ldaa	tptr-vbase,x	;high byte of address
-	bsr	outshx
+	bsr	OUTShx
 	ldaa	tptr-vbase+1,x	;low byte of address
 	bsr	outhex
 
@@ -648,7 +649,7 @@ memerr:	bsr	getvb		;get address of 'vbase'
 	bsr	printb
 
 	pula			;recover expected value
-	bsr	outshx
+	bsr	OUTShx
 
 	ldab	#errms3-vbase	;' read'
 	bsr	printb
@@ -656,7 +657,7 @@ memerr:	bsr	getvb		;get address of 'vbase'
 	ldx	tptr-vbase,x	;recover address pointer
 
 	pula			;recover found value
-	bra	outshx		;exit via outshx
+	bra	OUTShx		;exit via OUTShx
 
 ;**************************************************************
 ;* Subroutine to print pass # for user, with 'pass' if needed
@@ -673,20 +674,20 @@ ppass:	dec	pflag-vbase,x	;enough entries on this line?
 ppass1:	ldaa	passno-vbase,x	;print pass number
 	inc	passno-vbase,x	;bump pass number
 
-; fall into outshx for return
+; fall into OUTShx for return
 
 ;**************************************************************
 ;* Subroutine to print a space, then print a as 2 hex digits
 ;* does not touch a
 ;**************************************************************
-outshx:	jsr	outs		;print leading space
+OUTShx:	jsr	OUTS		;print leading space
 
 ;fall into outhex
 
 ;**************************************************************
 ;* Subroutine to print a as 2 hex digits
 ;**************************************************************
-outhex:	jmp	out2h		;use PROM monitor routine
+outhex:	jmp	OUT2H		;use PROM monitor routine
 
 ;**************************************************************
 ;* Exits: erdone for too many errors
@@ -701,7 +702,7 @@ exit:	bsr	printc		;print with preceeding CR LF
 	ldab	#donmsg-vbase
 	bsr	printb		;print final message
 
-	jmp	reset		;return to PROM monitor
+	jmp	RESET		;return to PROM monitor
 
 ;**************************************************************
 ;* Subroutine to get value of vbase into x (This subroutine
@@ -718,7 +719,7 @@ vbase:	.dw	vbase	;this gets modified when the code
 ;* Null-terminated strings
 ;* nulls after CRLF have parity bit set
 ;**************************************************************
-pasmsg:	.db	"PASS:",0
+pasmsg:	FCC	"PASS:",0
 somsg:	.db	"680 MTEST 1.4"
 	.db	CR,LF,h'80,"BY M. EBERHARD"	;fall into crmsg
 crmsg:	.db	CR,LF,h'80,0
@@ -730,7 +731,7 @@ errms1:	.db	"ERR AT",0
 errms2:	.db	" WROTE:",0
 errms3:	.db	" READ:",0
 donmsg:	.db	" ERRORS"	;fall into nulmsg
-nulmsg:	.db	h'80,h'80,0	;nulls protect for ACIA reset
+nulmsg:	.db	h'80,h'80,0	;nulls protect for ACIA RESET
 mormsg:	.db	"> ",0
 
 ;**************************************************************
@@ -764,7 +765,7 @@ passno:	.rs	1	;current pass number
 
 ;**************************************************************
 ;* Little Code Mover
-;* copy code to new location. test for good write, and reset
+;* copy code to new location. test for good write, and RESET
 ;* if not.
 ;* This code gets put in page 0 before running
 ;*   b=0 for forward copy (mdest<msourc)
@@ -791,7 +792,7 @@ movlup:	ldx	msourc	;get a source byte
 	staa	0,x
 
 	cmpa	0,x	;make sure it wrote
-	bne	reset+mover-exemov ;wrap around to reset
+	bne	RESET+mover-exemov ;wrap around to RESET
 
 	bsr	incdec	;bump and save pointer
 	stx	mdest
@@ -813,11 +814,11 @@ incdec:	tstb
 	rts
 movend:
 
-;**************************************************************
-;* enable echo after load
-;**************************************************************
-	.org	echo
-	.db	0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Turn character echo on after loading
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ORG	ECHO
+	FCB	0
 
-	.end
+	END
 
