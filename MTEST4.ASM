@@ -107,27 +107,27 @@ ECHO	equ	0F3H		;PROM monitor echo flag
 	CPU	6800		;Use only M6800 opcodes
 
 	ORG	ECHO		;Disable echo during loading
-	FCB	80H
+	DB	80H
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Page 0 variables for mover
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ORG	0
 
-mdest:	RMB	2		;destination address
-msourc:	RMB	2		;source address
-mtstrt:	RMB	2		;mtest start address for user
-mvbase:	RMB	2		;new vbase
-	RMB	1		;stack space for 1 bsr
-mstack:	RMB	1		;initial stack pointer address
-gotoa:	RMB	2		;this is actually on the stack
+mdest:	ds	2		;destination address
+msourc:	ds	2		;source address
+mtstrt:	ds	2		;mtest start address for user
+mvbase:	ds	2		;new vbase
+	ds	1		;stack space for 1 bsr
+mstack:	ds	1		;initial stack pointer address
+gotoa:	ds	2		;this is actually on the stack
 
 ; The following variables must be in this order, before exemov
 ; becasue they get initialized when the mover is installed
 
 mmdest:
-mcount:	RMB	2		;bytes of code
-mtlen:	RMB	2		;mtest ofset to last byte
+mcount:	ds	2		;bytes of code
+mtlen:	ds	2		;mtest ofset to last byte
 exemov:				;execution address for mover
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -711,8 +711,8 @@ exit:	bsr	printc		;print with preceeding CR LF
 ;* rest of the code location-independent
 ;* On exit: x=vbase
 ;**************************************************************
-getvb:	FCB	0CEH	;ldx immediate
-vbase:	FDB	vbase	;this gets modified when the code
+getvb:	db	0CEH	;ldx immediate
+vbase:	dw	vbase	;this gets modified when the code
 	rts		;...gets moved
 
 ;**************************************************************
@@ -720,40 +720,40 @@ vbase:	FDB	vbase	;this gets modified when the code
 ;* nulls after CRLF have parity bit set
 ;**************************************************************
 pasmsg:	FCC	"PASS:"
-	FCB	0
+	db	0
 somsg:	FCC	"680 MTEST 1.4"
-	FCB	CR,LF,80H
+	db	CR,LF,80H
 	FCC	"BY M. EBERHARD"	;fall into crmsg
-crmsg:	FCB	CR,LF,80H,0
+crmsg:	db	CR,LF,80H,0
 camsg:	FCC	"CODE ADDR (>00FF)? "
-	FCB	0
+	db	0
 samsg:	FCC	"BEG ADDR? "
-	FCB	0
+	db	0
 eamsg:	FCC	"END ADDR? "
-	FCB	0
+	db	0
 rngmsg:	FCC	"MTEST:"
-	FCB	0
+	db	0
 errms1:	FCC	"ERR AT"
-	FCB	0
+	db	0
 errms2:	FCC	" WROTE:"
-	FCB	0
+	db	0
 errms3:	FCC	" READ:"
-	FCB	0
+	db	0
 donmsg:	FCC	" ERRORS"	;fall into nulmsg
-nulmsg:	FCB	80H,80H,0	;nulls protect for ACIA RESET
+nulmsg:	db	80H,80H,0	;nulls protect for ACIA RESET
 mormsg:	FCC	"> "
-	FCB	0
+	db	0
 
 ;**************************************************************
 ;* Test pattern sequence, a prime number in length
 ;* Designed to cause a lot of bit-flipping and to catch
 ;* any bit-coupling and address-coupling problems
 ;**************************************************************
-patrn:	FCB	001H, 0FEH, 002H, 0FDH, 004H, 0FBH, 008H, 0F7H
-	FCB	010H, 0EFH, 020H, 0FDH, 040H, 0BFH, 080H, 07FH
-	FCB	000H, 0FFH, 055H, 0AAH, 033H, 0CCH, 0F0H, 00FH
-	FCB	0C3H, 03CH, 066H, 099H, 078H
-patend:	FCB	01H		;wrap pattern one byte
+patrn:	db	001H, 0FEH, 002H, 0FDH, 004H, 0FBH, 008H, 0F7H
+	db	010H, 0EFH, 020H, 0FDH, 040H, 0BFH, 080H, 07FH
+	db	000H, 0FFH, 055H, 0AAH, 033H, 0CCH, 0F0H, 00FH
+	db	0C3H, 03CH, 066H, 099H, 078H
+patend:	db	01H		;wrap pattern one byte
 	
 PATLEN	equ	patend-patrn
 
@@ -761,17 +761,17 @@ PATLEN	equ	patend-patrn
 ;* RAM variables not in page 0, so that we can test page 0 RAM
 ;**************************************************************
 
-	RMB	15	;reserve space for stack
-stack:	RMB	1	;needs to be before RAM variables
+	ds	15	;reserve space for stack
+stack:	ds	1	;needs to be before RAM variables
 
-tstart:	RMB	2	;first memory address to test
-pxstrt:	RMB	1	;pattern starting point
-tptr:	RMB	2	;current memory test location
-pxptr:	RMB	1	;current place in pattern
-tend:	RMB	2	;last memory address to test
-errcnt:	RMB	1	;error count
-pflag:	RMB	1	;0 means we need to print 'pass'
-passno:	RMB	1	;current pass number
+tstart:	ds	2	;first memory address to test
+pxstrt:	ds	1	;pattern starting point
+tptr:	ds	2	;current memory test location
+pxptr:	ds	1	;current place in pattern
+tend:	ds	2	;last memory address to test
+errcnt:	ds	1	;error count
+pflag:	ds	1	;0 means we need to print 'pass'
+passno:	ds	1	;current pass number
 
 ;**************************************************************
 ;* Little Code Mover
@@ -790,8 +790,8 @@ passno:	RMB	1	;current pass number
 ;* initialize these two variables while we install the mover
 
 
-mover:	FDB	movend-mtest	;this initializes mcount
-	FDB	movend-mtest-1	;this initializes mtlen
+mover:	dw	movend-mtest	;this initializes mcount
+	dw	movend-mtest-1	;this initializes mtlen
 
 movlup:	ldx	msourc	;get a source byte
 	ldaa	0,x
@@ -828,7 +828,7 @@ movend:
 ;Turn character echo on after loading
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ORG	ECHO
-	FCB	0
+	db	0
 
 	END
 
