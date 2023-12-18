@@ -1,2 +1,4 @@
 *.PRN
 *.S
+*.BIN
+*.LST
