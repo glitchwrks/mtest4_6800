@@ -8,6 +8,7 @@
 ;  27OCT2011  M. Eberhard  Make code relocatable and relocating
 ;  03NOV2011  M. Eberhard  comp. tsts, and check memory immediately
 ;  03NOV2011  M. Eberhard  combine fill and test passes for speed
+;  18DEC2023  J. Chapman   Ported to modified WCC3 A68 cross-assembler
 ;
 ; Descriprion:
 ;  This program tests a range of Altair 680 memory, specified by the
