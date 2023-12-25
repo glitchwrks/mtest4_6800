@@ -10,7 +10,7 @@ From Martin Eberhard's original notes:
 
 > The memory test algorithm is designed to ferret out a variety of memory problems. It is based on a test pattern that contains two walking bit patterns - one with the bit high, and the other with the bit low. It also contains various high-frequency patterns like 55 and AA. These pattern elements are scrambled to maximize the number of times each memory bit changes value during the test. The entire pattern is deliberately 29 bytes  long -- a prime number. The pattern is written repeatedly  through the test memory range, then read back and checked. Then the pattern is incremented for another pass through memory. This is repeated until every memory location in the test range has been tried with each byte in the test pattern. This should catch all address-line shorts, data line shorts, coupling between nearby cells, stuck bits, and even catch some longer-term memory loss faults.
 
-`MTEST4` was used to test and debug our [Altair 680 Universal RAM board](https://www.tindie.com/products/glitchwrks/glitch-works-altair-680-universal-64k-ram-board/). Its use exposed a few edge cases we likely wouldn't have found without it! Additionally, it is very fast for how thorough it is. 
+In addition to Martin's original use case, `MTEST4` was used to test and debug our [Altair 680 Universal RAM board](https://www.tindie.com/products/glitchwrks/glitch-works-altair-680-universal-64k-ram-board/). Its use exposed a few edge cases we likely wouldn't have found without it! Additionally, it is very fast for how thorough it is. 
 
 ### Technical Notes
 
