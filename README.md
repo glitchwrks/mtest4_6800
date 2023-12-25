@@ -32,11 +32,6 @@ Load the file MTEST4.obj into an Altair 680b using the PROM Monitor's 'L' comman
 
 Next, tell MTEST the address range of the memory to test. MTEST will run through 30 passes over the range. Each pass takes about 10 seconds for each 16Kbytes of tested memory. MTEST will print the pass number at the end of each pass. (Note that pass 0 only fills memory - no testing occurs.) Every time MTEST finds an error, it will report the address, what it wrote, and what it read.
 
-### TO-DO
-
- * Replace Altair 680 ROM monitor's `INCH` routine so we can relocate to page 0 (Note that `INCH` use `ECHO` in page 0)
- * Check for overlap of address range to test with `MTEST` itself
-
 ### Revision History
 
 The following enumerates revisions to the monitor before tracking in this particular Git repository:
