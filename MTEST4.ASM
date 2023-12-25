@@ -1,93 +1,51 @@
-;********************************************************************
-; MTEST: Altair 680 Memory Test Program
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;MTEST4 -- Altair 680 Memory Test Program
 ;
-; Revision History:
-;    Date        Author         Comment
-;  23OCT2011  M. Eberhard  Created
-;  27OCT2011  M. Eberhard  Don't use page 0 memory, so we can test it
-;  27OCT2011  M. Eberhard  Make code relocatable and relocating
-;  03NOV2011  M. Eberhard  comp. tsts, and check memory immediately
-;  03NOV2011  M. Eberhard  combine fill and test passes for speed
-;  18DEC2023  J. Chapman   Ported to modified WCC3 A68 cross-assembler
+;This program tests a range of Altair 680 memory, specified
+;by the user on the console. It can relocate itself anywhere
+;outside of page 0.
 ;
-; Descriprion:
-;  This program tests a range of Altair 680 memory, specified by the
-;  user. Before specifying the test memory range, the user is asked
-;  to specify where in memory the MTEST itself should sit. MTEST
-;  installs a little 'mover'program in memory at 0000. This mover
-;  moves MTEST from its current location to the specified location,
-;  then transfer control to the newley moved code. Once moved, the
-;  code at 0000 is no longer needed, and can be wiped out by the
-;  memory test.
+;Relocation is accomplished through a small mover program,
+;which prompts the user for the desired relocation base
+;address at startup. The mover is executed from 0x0000, and
+;transfers control to the relocated program. Once relocated,
+;the mover is no longer required, so page 0 memory can be
+;tested.
 ;
-;  The purpose of this relocation is to allow all portions of the
-;  Altair 680's memory to be tested. This program will prevent the
-;  user from locating MTEST below 0100, because the PROM monitor's
-;  I/O routines use flags in this area.. But it does not check to
-;  see if the range of memory to test overlaps MTEST itself.
-;  (perhaps this check can be done in a future version.) The mover
-;  does check to see if it wrote correctly as it is moving the code.
-;  if a code write fails, then the program simply aborts to the PROM
-;  monitor.
+;See README.md in the project root for more information on
+;history, inner workings, building, etc.
 ;
-;  The memory test algorithm is designed to ferret out a variety of
-;  memory problems. It is based on a test pattern that contains two
-;  walking bit patterns - one with the bit high, and the other with
-;  the bit low. It also contains various high-frequency patterns
-;  like 55 and AA. These pattern elements are scrambled to maximize
-;  the number of times each memory bit changes value during the
-;  test. The entire pattern is deliberately 29 bytes  long -- a 
-;  prime number. The pattern is written repeatedly  through the test
-;  memory range, then read back and checked. Then the pattern is
-;  incremented for another pass through memory. This is repeated
-;  until every memory location in the test range has been tried with
-;  each byte in the test pattern. This should catch all address-line
-;  shorts, data line shorts, coupling between nearby cells, stuck
-;  bits, and even catch some longer-term memory loss faults.
+;BEWARE! The current revision cannot test all of page 0
+;since it uses the MITS ROM monitor I/O routines, which need
+;some page 0 variables to operate!
 ;
-; Program Notes:
-; * Ported to assemble with a modified version of Warren C. Colley III's
-;   A68 cross-assembler. MFE's original version was written to assemble with
-;   PseudoCode's A68.com, a DOS-based cross assembler for the MC6800
-; * Porting to A68 removed the workarounds for bugs in the PseudoCode assembler
-;*  This program uses several I/O routines in the PROM monitor, and
-;   is therefore dependant on the standard Altair PROM monitor being
-;   present. (See 'PROM monitor entry points' below.)
-; * This program uses no page-0 memory, so that page 0 can be tested; however,
-;   the MITS PROM monitor does need a few page 0 locations for I/O.
-; * The main program is completely relocatable -- it relocates itself
-;   to an address specified by the user, so that all of memory can be
-;   tested. We pay a high performance and code-size penalty for
-;   having the code relocatable and not using page-0.
-; * The various subroutines are located in somewhat odd places, so
-;   that the bsr's reach, and everything remains relocatable.
+;Copyright (c) 2011 Martin Eberhard
+;Copyright (c) 2023 Glitch Works, LLC
 ;
-; TO DO
-; * Replace PROM Mon's 'INCH' routine so we can relocate to page 0.
-;   Note that 'INCH' use 'ECHO' in page 0.
-;
-;********************************************************************
+;See LICENSE included in the project root for licensing
+;information.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Program Equates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-MAXERS	equ	64		;max number of errors before we quit
+MAXERS	equ	64		;Max number of errors before we quit
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;ASCII Equates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-CTRLC	equ	03H		;control C
-CR	equ	0DH		;carriage return
-LF	equ	0AH		;line feed
+CTRLC	equ	03H		;Control+C
+CR	equ	0DH		;Carriage return
+LF	equ	0AH		;Line feed
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;PROM Monitor Equates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-INCH	equ	0FF00H		;get chr in b
-OUT2H	equ	0FF6DH		;print a in hex, clobber b
-OUTCH	equ	0FF81H		;print chr in b on console
-OUTS	equ	0FF82H		;print a space on the console
-RESET	equ	0FFD8H		;cold start
+INCH	equ	0FF00H		;Get char from console in A
+OUT2H	equ	0FF6DH		;Print A to console in hex, clobber B
+OUTCH	equ	0FF81H		;Print char in B on console
+OUTS	equ	0FF82H		;Print a space on the console
+RESET	equ	0FFD8H		;Cold start
 ECHO	equ	0F3H		;PROM monitor echo flag
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -104,705 +62,737 @@ ECHO	equ	0F3H		;PROM monitor echo flag
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ORG	0
 
-mdest:	ds	2		;destination address
-msourc:	ds	2		;source address
-mtstrt:	ds	2		;mtest start address for user
-mvbase:	ds	2		;new vbase
-	ds	1		;stack space for 1 bsr
-mstack:	ds	1		;initial stack pointer address
-gotoa:	ds	2		;this is actually on the stack
+MDEST:	ds	2		;Destination address for mover
+MSOURC:	ds	2		;Source address for mover
+MTSTRT:	ds	2		;MTEST start address for user
+MVBASE:	ds	2		;New VBASE
+	ds	1		;Stack space for 1 BSR
+MSTACK:	ds	1		;Initial stack pointer address
+GOTOA:	ds	2		;This is actually on the stack
 
-; The following variables must be in this order, before exemov
-; becasue they get initialized when the mover is installed
-
-mmdest:
-mcount:	ds	2		;bytes of code
-mtlen:	ds	2		;mtest ofset to last byte
-exemov:				;execution address for mover
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;The following variables must be in this order, before
+;EXEMOV, because they get initialized when the move is
+;installed.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MMDEST:
+MCOUNT:	ds	2		;Count for bytes of code
+MTLEN:	ds	2		;MTEST ofset to last byte
+EXEMOV:				;Execution address for mover
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;MTEST start of execution
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ORG	0100H		;start out low in ram
+	ORG	0100H		;Start out low in ram
 
-mtest:	sei			;mask interrupts
+MTEST:	SEI			;Mask interrupts
 
-; Print sign-on message
+	LDAB	#SOMSG-VBASE	;Print sign-on message
+	BSR	PRNTC2		;...and set x=vbase
 
-	ldab	#somsg-vbase	;print sign-on message
-	bsr	prntc2		;...and set x=vbase
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Set up parameters to move the little mover into page 0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	STX	MSOURC		;Source will need MOVER-VBASE offset
+	LDAB	#MOVEND-MOVER	;B = number of bytes to move
+	LDX	#MMDEST		;Destination in page 0
+	STX	MDEST
 
-; Set up parameters to move little mover into page 0 memory
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PUTMOV -- Copy little mover into page 0
+;
+;We initialize some of the variables during this process.
+;
+;Falls through to GETBEG.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PUTMOV:	LDX	MSOURC		;Get a source byte, increment ptr
+	LDAA	MOVER-VBASE, X
+	INX
+	STX	MSOURC
 
-	stx	msourc		;source will need mover-vbase offset
-	ldab	#movend-mover	;b= number of bytes to move
-	ldx	#mmdest		;destination in page 0
-	stx	mdest
+	LDX	MDEST		;Put at dest, increment ptr
+	STAA	0, X
+	INX
+	STX	MDEST
 
-; Copy little mover program into page 0 memory, initializing
-; a couple of variables at the same time
+	DECB			;Count down to end
+	BNE	PUTMOV		;Done when zero
 
-putmov:	ldx	msourc		;get a source byte, bump ptr
-	ldaa	mover-vbase,x
-	inx
-	stx	msourc
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GETBEG -- Compute source address of MTEST move
+;
+;This routine pushes the current PC onto the stack to figure
+;out where we are in memory, and pulls it back -- there is
+;no return to the BSR at the beginning.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GETBEG:	BSR	GETBE1		;Place PC onto stack
+GETBE1:	PULB			;Pull PC high byte
+	PULA			;Pull PC low byte
+	SUBA	#GETBE1-MTEST	;Correct for above code
+	SBCB	#0		;Borrow
+	STAA	MSOURC+1	;Save low byte
+	STAB	MSOURC		;Save high byte
 
-	ldx	mdest		;put at dest, bump ptr
-	staa	0,x
-	inx
-	stx	mdest
-
-	decb			;count down to end
-	bne	putmov
-
-; Compute address of this code's beginning = source of code move
-
-	bsr	getbeg		;shove PC onto stack
-getbeg:	pulb			;pull PC high byte
-	pula			;pull PC low byte
-	suba	#getbeg-mtest	;correct for above code
-	sbcb	#0		;borrow
-	STAA	msourc+1	;save low byte
-	STAB	msourc	;save high byte
-
-; Ask user where we should put the code. Make sure the address is
-; not in page 0, where our little mover and the 'echo' flag are
-
-getca:	ldab	#camsg-vbase	;ask for code address
-	bsr	getadr		;code address is in mdest
-				;a=low(mdest), b=high(mdest)
-				;Z set if b=0
-	beq	getca		;try again if high byte=0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GETCA -- Get the desired run address for MTEST
+;
+;The mover cannot relocate MTEST into page 0, since the ROM
+;monitor's ECHO flag and the little mover both use it.
+;
+;Falls through to MCOPY.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GETCA:	LDAB	#CAMSG-VBASE	;Ask for destination MTEST address
+	BSR	GETADR		;Destination address is in MDEST
+				;A = low(MDEST), B = high(MDEST)
+				;Z set if B = 0
+	BEQ	GETCA		;Try again if page 0 specified
 
 ; Compute vbase for post-move code
 
-	adda	#(vbase-mtest) MOD 0100H
-	STAA	mvbase+1
-	adcb	#(vbase-mtest)/256
-	STAB	mvbase
+	ADDA	#(VBASE-MTEST) MOD 0100H
+	STAA	MVBASE+1
+	ADCB	#(VBASE-MTEST)/256
+	STAB	MVBASE
 
-; Remember the code start address for later reporting and testing
+	LDX	MDEST		;Get MTEST start address
+	STX	MTSTRT		;Save to display later
 
-	ldx	mdest
-	stx	mtstrt		;save to tell user
-
-; Set up 'return' to the post-move code (x=(mdest) here)
-
-	ldab	#init-mtest
+	LDAB	#INIT-MTEST	;Set up "return" to moved MTEST
 	
-gotolp:	inx			;loop: compute x=x+b
-	decb
-	bne	gotolp
-	stx	gotoa		;this is on mover's local stack	
+GETCA1:	INX			;Loop: compute X = X + B
+	DECB
+	BNE	GETCA1
+	STX	GOTOA		;Store on mover's local stack	
 
-; b=0 here
-; Test for forward or reverse copy, so this will work even if
-; the destination overlaps the source. 
-; b=0 for forward (mdest<msourc)
-; b=1 for reverse (mdest>msourc)
-; This will do the copy even if msourc=mdest
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;MCOPY -- Do forward or reverse copy
+;
+;This copy routine works even if the destination address
+;overlaps the source address.
+;
+;When falling through from GETCA, B = 0 from the last
+;iteration of GETCA1 loop.
+;
+;post: Move MDEST < MSOURC if B = 0
+;post: move MDEST > MSOURC if B = 1
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MCOPY:	LDAA	MSOURC+1	;LSB compare
+	SUBA	MDEST+1
+	LDAA	MSOURC		;MSB compare
+	SBCA	MDEST
+	BCC	MCOPY1		;Source is larger address. copy forward
 
-	LDAA	msourc+1	;lsb compare
-	SUBA	mdest+1
-	LDAA	msourc	;msb compare
-	SBCA	mdest
-	bcc	mcopy	;source is larger address. copy forward
+	INCB			;Note reverse copy
 
-; copy backward - first need to compute end addresses
+	LDX	#MSOURC		;Compute source last addresses
+	BSR	ADDLEN
+	LDX	#MDEST		;Compute destination last address
+	BSR	ADDLEN
 
-	incb		;note reverse copy
+MCOPY1:	LDS	#MSTACK		;Set up stack for little mover
+	JMP	EXEMOV		;Move this program
 
-	ldx	#msourc	;compute source last addresses
-	bsr	addlen
-	ldx	#mdest	;compute destination last address
-	bsr	addlen
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Subrountines for BSR Reach
+;
+;Subroutines placed here ensure that we can get to them with
+;BSR instructions, enabling relocation.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; Now use the page-0 Little Mover code to move this program
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GETADR -- Print message and get 16-bit address from user
+;
+;pre: VBASE+B contains message string
+;post: MDEST contains 16-bit address from user
+;post: A contains low byte of address address
+;post: B contains high byte of address
+;post: Z flag set if address is in page 0
+;post: X = VBASE
+;post: ERRCNT = 0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GETADR:	PSHB			;Save string pointer in case of bad input
+	BSR	PRNTC2		;Print prompt message, X=VBASE
 
-mcopy:	lds	#mstack		;set up stack for little mover
-	jmp	exemov
+	CLR	ERRCNT-VBASE, X	;No hex errors yet
 
-;**************************************************************
-;* Subroutines here for bsr reach
-;**************************************************************
+	BSR	IN2HEX		;Store high byte into MDEST
+	STAA	MDEST
+	BSR	IN2HEX		;Store low byte into MDEST+1
+	STAA	MDEST+1		;...and also A register
 
-;**************************************************************
-;* Subroutine to print message, then get an address from user
-;* retry until we get good hex
-;* Entry at gtsadr asks the user for the start address of the code
-;* on entry at getadr:
-;*   vbase+b=address of message string
-;* on exit:
-;*   mdest=16-bit value from user
-;*   a=(mdest+1) = low byte of received hex
-;*   b=(mdest) = high byte of received hex
-;*   Z flag set if b=0
-;*   x=vbase
-;*   errcnt=0
-;**************************************************************
-getadr:	pshb		;save string in in a case of bad input
+	PULB			;Recover prompt string pointer
 
-	bsr	prntc2		;print ask message, x=vbase
+	TST	ERRCNT-VBASE, X	;Any errors with hex input?
+	BNE	GETADR		;Yes, try again
 
-	clr	errcnt-vbase,x	;no hex errors yet
+	LDAB	MDEST		;B = high byte of address and
+	RTS			;Z set if address in page 0
 
-	bsr	in2hex		;get high byte into tend
-	STAA	mdest
-	bsr	in2hex		;get low byte into tend+1
-	STAA	mdest+1		;...and into a
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PRNTC2 -- Stepping stone to PRINTC
+;
+;This allows us to reach PRINTC with a branch, via PRINTC1.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PRNTC2:	BRA	PRNTC1
 
-	pulb			;recover ask msg pointer
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;ADDLEN -- Add 16-bit (MTLEN) to (X)
+;
+;This subroutine cannot be used during the actual memory
+;test because it uses page 0 memory.
+;
+;post: (X) = (X) + (MTLEN)
+;post: X unchanged
+;post: A undefined
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ADDLEN:	LDAA	1, X		;Low byte
+	ADDA	MTLEN+1
+	STAA	1, X
+	LDAA	0, X		;High byte + carry
+	ADCA	MTLEN
+	STAA	0, X
+	RTS
 
-	tst	errcnt-vbase,x	;any errors with hex input?
-	bne	getadr
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;IN2HEX -- Get two hex digits from console
+;
+;Aborts to ROM monitor if a CTRL+C is received (via INHEX).
+;
+;Falls through to INHEX.
+;
+;pre: X contains VBASE
+;post: A contains hex byte from console
+;post: ERRCNT = 0 for no errors
+;post: ERRCNT nonzero if errors detected
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+IN2HEX:	BSR	INHEX		;Get first hex nybble into B
+	ASLB			;Shift to high-order nybble
+	ASLB
+	ASLB
+	ASLB
+	TBA			;Save high nybble in A
 
-	LDAB	mdest	;set up b, Z for return
-	rts
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;INHEX -- Get a hex digit from console
+;
+;Aborts to ROM monitor if a CTRL+C is received.
+;
+;A and B contents are undefined if a non-hex character is
+;received.
+;
+;post: B contains hex nybble from console
+;post: A = A + B (combines two nybbles)
+;post: ERRCNT = 0 for no errors
+;post: ERRCNT nonzero if errors detected
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+INHEX:	JSR	INCH		;Get a char from the console
+	CMPB	#CTRLC		;Got abort?
+	BEQ	INHEX3		;Yes, go to monitor
 
-;**************************************************************
-;* stepping stones for longer branches
-;**************************************************************
-prntc2:	bra	prntc1
+	SUBB	#'0'		;Convert ASCII number to hex
+	CMPB	#09H
+	BLE	INHEX2		;Done already?
+	CMPB	#11H
+	BMI	INHEX1		;Not hex 
+	SUBB	#07H		;Convert ASCII letter to hex
+	CMPB	#0fH
+	BLE	INHEX2		;Good hex: done
 
-;**************************************************************
-;* subroutine to add (16-bit) (mtlen) to (x)
-;* this subroutine cannot be used during the actual memory
-;* test, because it uses page-0 memory.
-;* On Exit:
-;*    (x)=(x)+(mtlen)
-;*    x unchanged. trashes a
-;**************************************************************
-addlen:	ldaa	1,x	;low byte
-	ADDA	mtlen+1
-	staa	1,x
-	ldaa	0,x	;high byte + carry
-	ADCA	mtlen
-	staa	0,x
-	rts
+INHEX1:	INC	ERRCNT-VBASE, X	;Flag error
 
-;**************************************************************
-;* Subroutine to a get 2 hex digits into a
-;* Abort to PROM if user types control-C
-;* on entry:
-;*    x=vbase
-;* on exit:
-;*    a=hex byte
-;*    errcnt=0 for good hex, <>0 for bad chr
-;*    b trashed
-;*    x=vbase
-;**************************************************************
-in2hex:	bsr	inhex	;get 1st hex nibble into b
-	aslb		;shift to high-order nibble
-	aslb
-	aslb
-	aslb
-	tba		;save high nibble in a
+INHEX2:	ABA			;Combine B with high digit in A
+	RTS
+INHEX3:	JMP	RESET		;Abort to ROM monitor
 
-; fall into inhex
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GPARMS -- Print program addresses and get test parameters
+;
+;The start and end addresses of the moved MTEST program are
+;printed, and the user is prompted for memory test address
+;range.
+;
+;MTSTRT, MTLEN remain unchanged.
+;
+;Falls through to GPARM1.
+;
+;pre: MTSTRT contains first address of this program
+;pre: MTLEN contains byte length of this program
+;post: MCOUNT contains last address of this program
+;post: ERRCNT = 0
+;post: X = VBASE
+;post: A, B undefined
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GPARMS:	LDAB	#RNGMSG-VBASE	;Print "mtest:" string
+	BSR	PRNTC1
 
-;***
-;* Local subroutine to get one hex digit into b
-;* Jump to error if invalid character
-;* on exit, result is in b, and a=a+b (nibble combine)
-;* if bad hex digit, inc errcnt, a,b=garbage
-;* Control-C aborts to the PROM monitor
-;**
-inhex:	jsr	INCH	;get a chr
-	cmpb	#CTRLC	;abort?
-	beq	abort
+	LDX	#MTSTRT		;X = first program address
+	BSR	OUTADR		;Print address as 4 hex digits
 
-	subb	#'0'	;convert ASCII number to hex
-	cmpb	#09H
-	ble	hexdon	;done already?
-	cmpb	#11H
-	bmi	hexerr	;not hex 
-	subb	#07H	;convert ASCII letter to hex
-	cmpb	#0fH
-	ble	hexdon	;good hex: branch
-
-hexerr:	inc	errcnt-vbase,x	;flag error
-
-hexdon:	aba		;combine with high digit in a
-	rts
-
-abort:	jmp	RESET
-
-;**************************************************************
-; subroutine to print the address range of this program, and
-; then get start and end test addresses from the user
-;* On entry:
-;*    mtstrt = first address of this program
-;*    mtlen  = byte length of this program
-;* On Exit:
-;*    mtstrt = first address of this program
-;*    mtlen  = byte length of this program
-;*    mcount = last address of this program
-;*    errcnt=0
-;*    x=vbase
-;*    a,b, trashed
-;**************************************************************
-gparms:
-;* Print address range of this program
-;* mtstrt = first code address
-;* mcount = last code address
-
-gparm1:	ldab	#rngmsg-vbase	;'mtest:'
-	bsr	prntc1
-
-	ldx	#mtstrt
-	bsr	outadr		;print address as 4 hex digits
-
-	ldx	mtstrt		;compute last code address
-	stx	mcount		;result will be in mcount
-	ldx	#mcount
-	bsr	addlen		;(mcount)=(mstrt)+(mtlen)
-	bsr	outadr		;print address as 4 hex digits
+	LDX	MTSTRT		;Compute last program address
+	STX	MCOUNT		;Store result in MCOUNT
+	LDX	#MCOUNT
+	BSR	ADDLEN		;(MCOUNT)=(MSTRT)+(MTLEN)
+	BSR	OUTADR		;Print address as 4 hex digits
 	
 ; Get memory test parameters. gtsadr returns with the user-
 ; entered address in mdest and also in a & b, and x=vbase.
 
-gparm2:	ldab	#samsg-vbase		;'start address?'
-	bsr	getadr			;sets x=vbase too
-	staa	tstart-vbase+1,x	;low byte is in a	
-	stab	tstart-vbase,x		;high byte is in b
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GPARM1 -- Get memory test address paramters
+;
+;Bounds checks are made and enforced:
+; * End address must be after or equal to the start address
+; * Start address must be beyond MTEST code
+; * End address must be before MTEST code (no wraparound)
+;
+;GETADR returns with the user provided address in MDEST, A
+; and B, and X = VBASE.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GPARM1:	LDAB	#SAMSG-VBASE	;Print 'start address?' string
+	BSR	GETADR
+	STAA	TSTART-VBASE+1, X	
+	STAB	TSTART-VBASE, X	
 
-	ldab	#eamsg-vbase		;'end address?'
-	bsr	getadr
-	staa	tend-vbase+1,x		;low byte is in a	
-	stab	tend-vbase,x		;high byte is in b
+	LDAB	#EAMSG-VBASE	;Print 'end address?' string
+	BSR	GETADR
+	STAA	TEND-VBASE+1, X	;Low byte is in A	
+	STAB	TEND-VBASE, X	;High byte is in B
 
-; Bounds checks
-;   mtstrt = first code address
-;   mcount = last code address
-;   tstart = first test address
-;   tend = a,b = last test address
-;   x=vbase
+	SUBA	TSTART-VBASE+1, X
+	SBCB	TSTART-VBASE, X
+	BCS	GPARM1		;Retry if end address < start address
 
-; make sure tend>=tstart (a=tend low byte, b=tend high byte)
-
-	suba	tstart-vbase+1,x
-	sbcb	tstart-vbase,x
-	bcs	gparm2
-
-; See if tstart>mcount (which is the last code address now)
-
-	LDAA	mcount+1
-	suba	tstart-vbase+1,x
-	LDAA	mcount
-	sbca	tstart-vbase,x
-	bcs	gparm3		;test mem is above code
+	LDAA	MCOUNT+1
+	SUBA	TSTART-VBASE+1, X
+	LDAA	MCOUNT
+	SBCA	TSTART-VBASE, X
+	BCS	GPARM3		;Retry if range is in MTEST code
 	
-; make sure mtstrt>tend (test mem is below code)
+	LDAA	TEND-VBASE+1, X
+	SUBA	MTSTRT+1
+	LDAA	TEND-VBASE, X
+	SBCA	MTSTRT
+	BCC	GPARMS		;Retry if range is in MTEST code
 
-	ldaa	tend-vbase+1,x
-	SUBA	mtstrt+1
-	ldaa	tend-vbase,x
-	SBCA	mtstrt
-	bcc	gparm1		;overlap error
+GPARM3:	RTS
 
-gparm3:	rts
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GETVB2 -- Stepping stone to GETVB
+;
+;This allows us to reach GETVB with a branch, via GETVB1.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GETVB2:	BRA	GETVB1
 
-;**************************************************************
-;* stepping stones for longer branches
-;**************************************************************
-getvb2:	bra	getvb1
-prntc1:	bra	printc
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PRNTC1 -- Stepping stone to PRINTC
+;
+;This allows us to reach PRINTC with a branch.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PRNTC1:	BRA	PRINTC
 
-;**************************************************************
-;* Subroutine to print (x) as 4 hex digits preceeded by
-;* a space. This subroutine cannot be used during the actual
-;* memory test.
-;**************************************************************
-outadr:	jsr	OUTS		;print leading space
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;OUTADR -- Print (X) on console as space, 4 hex digits
+;
+;Returns through OUT2H (ROM monitor subroutine).
+;
+;This subroutine cannot be used during the actual memory
+;test.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+OUTADR:	JSR	OUTS		;Print leading space
+	LDAA	0, X		;High byte
+	BSR	OUTAD1
+	LDAA	1, X		;Low byte
+OUTAD1:	JMP	OUT2H		;Use ROM monitor hex printer
 
-	ldaa	0,x		;high byte
-	bsr	outahx
-	ldaa	1,x		;low byte
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;INIT -- Initialize variables for actual memory test
+;
+;We return to this point after MTEST code has been
+;relocated.
+;
+;Falls through to NXTPAS.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+INIT:	LDX	MVBASE		;New VBASE for new code
+	STX	0, X
 
-outahx:	jmp	OUT2H		;use PROM monitor routine
+	LDAB	#STACK-VBASE	;Compute address of stack
+INIT1:	INX
+	DECB
+	BNE	INIT1
 
-;**************************************************************
-;* Initialize variables for the actual memory test
-;* We return here after the code has been moved
-;**************************************************************
-init:	ldx	mvbase		;new vbase for new code
-	stx	0,x
+	TXS			;Set up MTEST stack
 
-; Initialize the stack (x=vbase here)
+	BSR	GPARMS		;Get/validate memory test params
 
-	ldab	#stack-vbase	;compute address of stack
-stklp:	inx
-	decb
-	bne	stklp
+	CLR	PFLAG-VBASE, X	;We need to print 'pass'
+	CLR	PASSNO-VBASE, X	;Start with pass number 0
+	LDAA	#PATLEN+1	;Initial pattern start
+	STAA	PXSTRT-VBASE, X
 
-	txs			;set up stack
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;NXTPAS -- Main memory test loop
+;
+;This routine performs one full pass through the user-
+;specified range of memory for each element in the test
+;pattern, plus one -- thirty passes in total.
+;
+;Initial pass just fills with the pattern, quickly
+;complementing it a few times with each write to torture
+;test each location.
+;
+;Subsequent passes test previous pass written values and
+;fill with the next entry.
+;
+;NO PAGE 0 MEMORY MAY BE USED AFTER THIS POINT!
+;
+;Falls through to NXTBYT.
+;
+;pre: X = VBASE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+NXTPAS:	LDAA	TSTART-VBASE, X	;Set pointer to the start of tested memory
+	STAA	TPTR-VBASE, X
+	LDAA	TSTART-VBASE+1, X
+	STAA	TPTR-VBASE+1, X
 
-; Get and validate memory test parameters from the user
+	LDAA	PXSTRT-VBASE, X	;Set pattern pointer to this pass's offset
+	STAA	PXPTR-VBASE, X
 
-	bsr	gparms
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;NXTBYT - Test and write next byte in memory
+;
+;Compute pointer to the next pattern entry + 1
+;
+;pre: X = VBASE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+NXTBYT:	LDAA	PXPTR-VBASE, X	;Point to pattern entry
+	DECA
+	BNE	NXTBY1		;Modulo bump
+	LDAA	#PATLEN
+NXTBY1:	STAA	PXPTR-VBASE, X
 
-; Initialize RAM variables
-; Note: errcnt was cleared by getadr in gparms
+NXTBY2:	INX			;Get pattern entry The Hard way, compute
+	DECA			;X = X + A to get this pattern entry. This
+	BNE	NXTBY2		;code is the worst penalty for relocation.
 
-	clr	pflag-vbase,x	;we need to print 'pass'
-	clr	passno-vbase,x	;start with pass number 0
-	ldaa	#PATLEN+1	;initial pattern start
-	staa	pxstrt-vbase,x
+	LDAB	PATRN-VBASE-1, X
+	LDAA	PATRN-VBASE, X	;Previous pattern entry
 
-; fall into nxtpas
+	PSHB			;Save next data
 
-;**************************************************************
-;* Main program loop
-;*
-;* this will perform on full pass through the user-specified
-;* range of memory for each element in the test pattern plus
-;* one - thirty passes in total.
-;*
-;* On initial pass through memory, just fill with the pattern,
-;* quickly complimenting it a few times with each write to
-;* torture memory.
-;* 
-;* On subsequent passes, each byte against what was written,
-;* then fill with the next pattern entry.
-;*
-;* No page-0 memory may be used past this point.
-;*
-;* On entry:
-;*    x=vbase
-;**************************************************************
-;**
-;* Start a new pass through memory:
-;* Set pointer to beginning of memory, and the start of this
-;* pass's pattern
-;**
-nxtpas:	ldaa	tstart-vbase,x	;set memory pointer to the
-	staa	tptr-vbase,x	;...beginning of test memory
-	ldaa	tstart-vbase+1,x
-	staa	tptr-vbase+1,x
+	BSR	GETVB1		;Get address of VBASE
+	LDAB	PASSNO-VBASE, X	;First pass?
+	LDX	TPTR-VBASE, X	;Get current memory address
+				;A = expected value, next value on stack
+				;X = address under test
+	TSTB			;B = PASSNO, check for first pass
+	BEQ	NXTBY3		;Don't test if first pass
 
-	ldaa	pxstrt-vbase,x	;set pattern pointer to this
-	staa	pxptr-vbase,x	;...pass's pattern start	
-;**
-;* Test & write the next byte in memory:
-;* Compute pointer to next pattern entry +1
-;* x=vbase here.
-;** 
-nxtbyt:	ldaa	pxptr-vbase,x	;point to pattern entry
-	deca
-	bne	fltst1		;modulo bump
-	ldaa	#PATLEN
-fltst1:	staa	pxptr-vbase,x
+	LDAB	0, X		;Read memory into B
+	CBA			;Compare to pattern in A
+	BEQ	NXTBY3		;OK - keep going
+	BSR	MEMERR		;Report error on console
+NXTBY3:	PULB			;Pull next data off the stack
 
-; Get pattern entry the hard way
-; a = (vbase+patrn+a)
-; This loop is the worst penalty for relocatable code.
+	STAB	0, X		;B != 0: fill memory this pass
 
-xplusa:	inx			;compute x=x+a
-	deca			;to get this pattern entry
-	bne	xplusa
-
-	ldab	patrn-vbase-1,x	;a=expected pattern entry
-	ldaa	patrn-vbase,x	;a=previous pattern entry
-
-	pshb			;save next data
-
-	bsr	getvb1		;get address of 'vbase'
-	ldab	passno-vbase,x	;first pass?
-	ldx	tptr-vbase,x	;get current memory address
-
-; a=expected value, b=passno, (stack)=next value, x=address
-
-	tstb			;first pass?
-	beq	fltst3		;don't test if so
-
-fltst2:	ldab	0,x		;read memory into b
-	cba			;compare to pattern in a
-	beq	fltst3		;ok - keep going
-	bsr	memerr		;report error on console
-fltst3:	pulb			;recover next data
-
-; Write new data to this memory location
-
-	stab	0,x		;b<>0: fill memory this pass
-
-	com	0,x		;flip a few times to torture
-	com	0,x		;be fast: don't use a loop
-	com	0,x
-	com	0,x
+	COM	0, X		;Use indexed complement to directly
+	COM	0, X		;flip bits in memory. Be fast: don't
+	COM	0, X		;use a loop. At the end, we have written
+	COM	0, X		;the true value into the current location.
 
 ; Bump memory pointer and see if we've reached the end
 
-	bsr	getvb1		;get address of 'vbase'
-	inc	tptr-vbase+1,x	;bump current memory address
-	bne	fltst4
-	inc	tptr-vbase,x	;16-bit bump
-fltst4:
-	ldaa	tend-vbase+1,x	;compare address low bytes
-	suba	tptr-vbase+1,x	;set C on borrow
-	ldaa	tend-vbase,x	;compare address high bytes
-	sbca	tptr-vbase,x	;including borrow
+	BSR	GETVB1		;Get address of VBASE
+	INC	TPTR-VBASE+1, X	;Bump current memory address
+	BNE	NXTBY4
+	INC	TPTR-VBASE, X	;16-bit bump
 
-	bcc	nxtbyt		;next byte this pass
-;**
-;* We made it all the way through memory. time for another pass
-;**
-	bsr	ppass		;print pass number for user
+NXTBY4: LDAA	TEND-VBASE+1, X	;Compare address low bytes
+	SUBA	TPTR-VBASE+1, X	;Set C on borrow
+	LDAA	TEND-VBASE, X	;Compare address high bytes
+	SBCA	TPTR-VBASE, X	;Including borrow
 
-; Bump starting point in the pattern to loop through all
-; patterns in every memory location
+	BCC	NXTBYT		;Not done with this pass, next pattern
 
-	dec	pxstrt-vbase,x	;bump pattern start point
-	bne	nxtpas		;next pass through memory
+	BSR	PPASS		;Reached the ending test address, print
+				;pass information
 
-; All done - report error count and return to PROM monitor
+	DEC	PXSTRT-VBASE, X	;Bump pattern start point
+	BNE	NXTPAS		;Not done, do another pass through memory
 
-	ldab	#crmsg-vbase	;ending CRLF
-	bra	exit
+	LDAB	#CRMSG-VBASE	;Done, print ending CRLF
+	BRA	EXIT		;Return to ROM monitor
 
-;**************************************************************
-;* Subroutines here for bsr reach
-;**************************************************************
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GETVB1 -- Stepping stone to GETVB
+;
+;This allows us to reach GETVB with a branch.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GETVB1:	BRA	GETVB
 
-;**************************************************************
-;* stepping stone for longer branches
-;**************************************************************
-getvb1:	bra	getvb
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PRINTC -- Print CR, LF, and a string to console
+;
+;Falls through to PRINTB.
+;
+;Aliased by PRINTC1, PRINTC2 as branch stepping stones.
+;
+;pre: B contains string offset from VBASE
+;post: string printed to console
+;post: X = VBASE
+;post: B contents undefined
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PRINTC:	PSHB			;Save string reference
+	BSR	GETVB		;X = VBASE
+	LDAB	#CRMSG-VBASE	;Print CR, LF
+	BSR	PRINTB
+	PULB			;Pull string address off stack
 
-;**************************************************************
-;* Subroutine to print CRLF, then the string at vbase+b
-;* On entry:
-;*   b=string address offset from vbase (b>0)
-;* On exit:
-;*   b trashed
-;*   x=vbase
-;**************************************************************
-printc:	pshb			;save string reference
-	bsr	getvb		;x=vbase
-	ldab	#crmsg-vbase	;CRLF
-	bsr	printb
-	pulb			;recover string address
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PRINTB -- Print a NULL-terminated string to console
+;
+;Returns through GETVB.
+;
+;pre: B contains string offset from VBASE
+;pre: X = VBASE
+;post: X = VBASE
+;post: B contents undefined
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PRINTB:	INX
+	DECB
+	BNE	PRINTB		;Loop until X points to string
 
-; fall into printb
+PRNTB1:	LDAB	0, X		;Get a string char
+	BEQ	GETVB		;Exit through GETVB if NULL
+	INX			;Point to next string char
+	JSR	OUTCH		;Call to ROM monitor to print char in B
+	BRA	PRNTB1
 
-;**************************************************************
-;* Subroutine to print null-terminated string at vbase+b
-;* On entry:
-;*   b=string address offset from vbase (b>0)
-;*   x=vbase (we exit through getvb)
-;* On exit:
-;*   b trashed
-;*   x=vbase
-;**************************************************************
-printb:	
-xplusb:	inx			;count x register up
-	decb
-	bne	xplusb		;loop until x points to string
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;MEMERR -- Report a memory error
+;
+;Exits via OUTSHX.
+;
+;pre: A contains expected data
+;pre: B contains found data
+;pre: X = TPTR = address of error
+;post: ERRCNT is decremented, abort if 0
+;post X = TPTR
+;post: B contents undefined
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MEMERR:	BSR	GETVB		;Get address of VBASE
 
-printx:	ldab	0,x		;get a string byte
-	beq	getvb		;null: exit through getvb
-	inx			;next
-	jsr	OUTCH		;PROM: print chr in b
-	bra	printx
+	PSHB			;Put found data onto stack
+	PSHA			;Put expected data onto stack
 
-;**************************************************************
-;* Subroutine to report memory error
-;* on entry:
-;*   a=expected data
-;*   b=found data
-;*   x= tptr=address
-;* on exit:
-;*   b trashed
-;*   errcnt is decremented, and abort if errcnt=0
-;*   x=tptr
-;**************************************************************
-memerr:	bsr	getvb		;get address of 'vbase'
+	INC	ERRCNT-VBASE, X	;Too many errors?
+	LDAB	#MAXERS		;Max allowed errors
+	CMPB	ERRCNT-VBASE, X
+	BEQ	ERDONE		;Quit if too many errors
 
-	pshb			;found data onto stack
-	psha			;expected data onto stack
+	CLR	PFLAG-VBASE, X	;We need to print 'pass' message
 
-	inc	errcnt-vbase,x	;too many errors?
-	ldab	#MAXERS		;max allowed errors
-	cmpb	errcnt-vbase,x
-	beq	erdone		;quit if so
+	LDAB	#ERRMS1-VBASE	;Print 'error at' string
+	BSR	PRINTC
 
-	clr	pflag-vbase,x	;we need to print 'pass'
+	LDAA	TPTR-VBASE, X	;Print high byte of address
+	BSR	OUTSHX
+	LDAA	TPTR-VBASE+1, X	;Print low byte of address
+	BSR	OUTHEX
 
-	ldab	#errms1-vbase	;'error at'
-	bsr	printc
+	LDAB	#ERRMS2-VBASE	;Print ' wrote' string
+	BSR	PRINTB
 
-	ldaa	tptr-vbase,x	;high byte of address
-	bsr	OUTShx
-	ldaa	tptr-vbase+1,x	;low byte of address
-	bsr	outhex
+	PULA			;Pull expected value off stack
+	BSR	OUTSHX
 
-	ldab	#errms2-vbase	;' wrote'
-	bsr	printb
+	LDAB	#ERRMS3-VBASE	;Print ' read' string
+	BSR	PRINTB
 
-	pula			;recover expected value
-	bsr	OUTShx
+	LDX	TPTR-VBASE, X	;Recover address pointer
 
-	ldab	#errms3-vbase	;' read'
-	bsr	printb
+	PULA			;Pull found value off stack
+	BRA	OUTSHX		;Exit via OUTSHX
 
-	ldx	tptr-vbase,x	;recover address pointer
-
-	pula			;recover found value
-	bra	OUTShx		;exit via OUTShx
-
-;**************************************************************
-;* Subroutine to print pass # for user, with 'pass' if needed
-;* On entry: x=vbase
-;**************************************************************
-ppass:	dec	pflag-vbase,x	;enough entries on this line?
-	bpl	ppass1
-	ldab	#15		;max 16 entries per line
-	stab	pflag-vbase,x
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PPASS -- Print pass number
+;
+;Print the pass number to the console, with 'pass' prefix if
+;needed.
+;
+;Falls through to OUTSHX.
+;
+;pre: X = VBASE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PPASS:	DEC	PFLAG-VBASE, X	;Enough entries on this line?
+	BPL	PPASS1
+	LDAB	#15		;Max 16 entries per line
+	STAB	PFLAG-VBASE, X
 	
-	ldab	#pasmsg-vbase	;print CRLF,'pass'
-	bsr	printc
+	LDAB	#PASMSG-VBASE	;Print CR, LF, 'pass'
+	BSR	PRINTC
 
-ppass1:	ldaa	passno-vbase,x	;print pass number
-	inc	passno-vbase,x	;bump pass number
+PPASS1:	LDAA	PASSNO-VBASE, X	;Print pass number
+	INC	PASSNO-VBASE, X	;Increment pass number
 
-; fall into OUTShx for return
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;OUTSHX -- Print a space and two hex digits
+;
+;Preserves A register, clobbers B register.
+;
+;pre: A register contains byte to print
+;post: space and hex representation of byte in A printed
+;post: A register contains byte printed
+;post: B contents undefined
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+OUTSHX:	JSR	OUTS		;Print leading space
 
-;**************************************************************
-;* Subroutine to print a space, then print a as 2 hex digits
-;* does not touch a
-;**************************************************************
-OUTShx:	jsr	OUTS		;print leading space
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;OUTHEX -- Print two hex digits
+;
+;This implementation uses the hex printer in the MITS ROM
+;monitor.
+;
+;pre: A register contains byte to print
+;post: hex representation of byte in A printed
+;post: A register contains byte printed
+;post: B contents undefined
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+OUTHEX:	JMP	OUT2H		;Use ROM monitor routine
 
-;fall into outhex
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;ERDONE -- Quit with too many errors
+;
+;Falls through to EXIT.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ERDONE:	LDAB	#MORMSG-VBASE	;Print '>'
 
-;**************************************************************
-;* Subroutine to print a as 2 hex digits
-;**************************************************************
-outhex:	jmp	OUT2H		;use PROM monitor routine
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;EXIT -- Quit for successful run
+;
+;pre: B contains offset to exit message
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+EXIT:	BSR	PRINTC		;Print with preceeding CR LF
+	LDAA	ERRCNT-VBASE, X	;Print error count
+	BSR	OUTHEX
+	LDAB	#DONMSG-VBASE
+	BSR	PRINTB		;Print final message
 
-;**************************************************************
-;* Exits: erdone for too many errors
-;* exit (with string address in x) for normal exit
-;* error count in errcnt
-;**************************************************************
-erdone:	ldab	#mormsg-vbase	;'>'
+	JMP	RESET		;Return to ROM monitor
 
-exit:	bsr	printc		;print with preceeding CR LF
-	ldaa	errcnt-vbase,x	;print error count
-	bsr	outhex
-	ldab	#donmsg-vbase
-	bsr	printb		;print final message
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;GETVB -- Get the value of VBASE into X
+;
+;This subroutine must be at the end, right before strings
+;and variables.
+;
+;This nasty little piece of self-modifying code makes the
+;rest of the code relocatable.
+;
+;post: X = VBASE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GETVB:	db	0CEH		;LDX immediate
+VBASE:	dw	VBASE		;This gets modified when the code
+	RTS			;...gets moved
 
-	jmp	RESET		;return to PROM monitor
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;NULL-Terminated Strings
+;
+;NULLs after CR, LF have the parity bit set.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PASMSG:	db	"PASS:", 0
+SOMSG:	db	"680 MTEST 1.4", CR, LF, 80H
+	db	"BY M. EBERHARD"
+CRMSG:	db	CR, LF, 80H, 0
+CAMSG:	db	"CODE ADDR (>00FF)? ", 0
+SAMSG:	db	"BEG ADDR? ", 0
+EAMSG:	db	"END ADDR? ", 0
+RNGMSG:	db	"MTEST:", 0
+ERRMS1:	db	"ERR AT", 0
+ERRMS2:	db	" WROTE:", 0
+ERRMS3:	db	" READ:", 0
+DONMSG:	db	" ERRORS"	;Fall into NULMSG
+NULMSG:	db	80H, 80H, 0	;NULLs protect for ACIA RESET
+MORMSG:	db	"> ", 0
 
-;**************************************************************
-;* Subroutine to get value of vbase into x (This subroutine
-;* must be at end, right before strings and variables.)
-;* This nasty little piece of self-modifying code makes the 
-;* rest of the code location-independent
-;* On exit: x=vbase
-;**************************************************************
-getvb:	db	0CEH	;ldx immediate
-vbase:	dw	vbase	;this gets modified when the code
-	rts		;...gets moved
-
-;**************************************************************
-;* Null-terminated strings
-;* nulls after CRLF have parity bit set
-;**************************************************************
-pasmsg:	db	"PASS:", 0
-somsg:	db	"680 MTEST 1.4", CR, LF, 80H
-	db	"BY M. EBERHARD"	;fall into crmsg
-crmsg:	db	CR, LF, 80H, 0
-camsg:	db	"CODE ADDR (>00FF)? ", 0
-samsg:	db	"BEG ADDR? ", 0
-eamsg:	db	"END ADDR? ", 0
-rngmsg:	db	"MTEST:", 0
-errms1:	db	"ERR AT", 0
-errms2:	db	" WROTE:", 0
-errms3:	db	" READ:", 0
-donmsg:	db	" ERRORS"	;fall into nulmsg
-nulmsg:	db	80H, 80H, 0	;nulls protect for ACIA RESET
-mormsg:	db	"> ", 0
-
-;**************************************************************
-;* Test pattern sequence, a prime number in length
-;* Designed to cause a lot of bit-flipping and to catch
-;* any bit-coupling and address-coupling problems
-;**************************************************************
-patrn:	db	001H, 0FEH, 002H, 0FDH, 004H, 0FBH, 008H, 0F7H
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;PATRN -- Test Pattern Sequence
+;
+;This sequence is a prime number in length and designed to
+;cause a lot of bit-flipping, to catch any bit-coupling and
+;address-coupling problems.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PATRN:	db	001H, 0FEH, 002H, 0FDH, 004H, 0FBH, 008H, 0F7H
 	db	010H, 0EFH, 020H, 0FDH, 040H, 0BFH, 080H, 07FH
 	db	000H, 0FFH, 055H, 0AAH, 033H, 0CCH, 0F0H, 00FH
 	db	0C3H, 03CH, 066H, 099H, 078H
-patend:	db	01H		;wrap pattern one byte
+PATEND:	db	001H		;Wrap pattern one byte
 	
-PATLEN	equ	patend-patrn
+PATLEN	equ	PATEND-PATRN
 
-;**************************************************************
-;* RAM variables not in page 0, so that we can test page 0 RAM
-;**************************************************************
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;RAM Variables
+;
+;These variables are not in page 0 so that we can test RAM
+;located in page 0.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ds	15	;Reserve space for MTEST stack
+STACK:	ds	1	;Stack needs to be before RAM variables
 
-	ds	15	;reserve space for stack
-stack:	ds	1	;needs to be before RAM variables
+TSTART:	ds	2	;First memory address to test
+PXSTRT:	ds	1	;Pattern starting point
+TPTR:	ds	2	;Current memory test location
+PXPTR:	ds	1	;Current place in pattern
+TEND:	ds	2	;Last memory address to test
+ERRCNT:	ds	1	;Error count
+PFLAG:	ds	1	;0 means we need to print 'pass'
+PASSNO:	ds	1	;Current pass number
 
-tstart:	ds	2	;first memory address to test
-pxstrt:	ds	1	;pattern starting point
-tptr:	ds	2	;current memory test location
-pxptr:	ds	1	;current place in pattern
-tend:	ds	2	;last memory address to test
-errcnt:	ds	1	;error count
-pflag:	ds	1	;0 means we need to print 'pass'
-passno:	ds	1	;current pass number
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;MOVER -- Little Code Mover
+;
+;This routine copies code to a new location. It tests for
+;good writes, and aborts to RESET if not. It gets put in
+;page 0 before running.
+;
+;This routine must be here so that it is close to VBASE.
+;
+;pre: B = 0 for forward copy (MDEST < MSOURC)
+;pre: B = 1 for reverse copy (MDEST > MSOURC)
+;pre: MSOURCE contains first address of source
+;pre: MDEST contains first address of destination
+;pre: MCOUNT contains number of bytes to copy
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MOVER:	dw	MOVEND-MTEST	;This initializes MCOUNT
+	dw	MOVEND-MTEST-1	;This initializes MTLEN
 
-;**************************************************************
-;* Little Code Mover
-;* copy code to new location. test for good write, and RESET
-;* if not.
-;* This code gets put in page 0 before running
-;*   b=0 for forward copy (mdest<msourc)
-;*   b=1 for reverse copy (mdest>msourc)
-;* 16-bit Variables On Entry:
-;*   msourc = first address of source
-;*   mdest = first address of destination
-;*   mcount = number of bytes to copy
-;* Must be here, so that 'mover' is close to vbase.  
-;**************************************************************
+MOVER1:	LDX	MSOURC	;Get a source byte
+	LDAA	0, X
+	BSR	MOVER3	;Bump and save pointer
+	STX	MSOURC
 
-;* initialize these two variables while we install the mover
+	LDX	MDEST	;Save byte at destination
+	STAA	0, X
 
+	CMPA	0, X	;Make sure it wrote, abort if not
+	BNE	RESET+MOVER-EXEMOV
 
-mover:	dw	movend-mtest	;this initializes mcount
-	dw	movend-mtest-1	;this initializes mtlen
+	BSR	MOVER3	;bump and save pointer
+	STX	MDEST
 
-movlup:	ldx	msourc	;get a source byte
-	ldaa	0,x
-	bsr	incdec	;bump and save pointer
-	stx	msourc
+	LDX	MCOUNT	;Bump and test loop count
+	DEX
+	STX	MCOUNT
+	BNE	MOVER1
 
-	ldx	mdest	;save byte at destination
-	staa	0,x
+MOVER2:	INX		;A little code recycling
+	RTS		;Jump to new code
 
-	cmpa	0,x	;make sure it wrote
-	bne	RESET+mover-exemov ;wrap around to RESET
-
-	bsr	incdec	;bump and save pointer
-	stx	mdest
-
-	ldx	mcount	;bump and test loop count
-	dex
-	stx	mcount
-	bne	movlup
-
-id1:	inx		;a little code recycling
-mdone:	rts		;jump to new code
-;*
-;* subroutine to either increment or decrement x
-;* based on b. b=0 means increment
-;*
-incdec:	tstb
-	beq	id1
-	dex
-	rts
-movend:
+MOVER3:	TSTB		;Test contents of B
+	BEQ	MOVER2	;B = 0, increment X
+	DEX		;B = 1, decrement X
+	RTS
+MOVEND:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Turn character echo on after loading
@@ -811,4 +801,3 @@ movend:
 	db	0
 
 	END
-
