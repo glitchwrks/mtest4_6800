@@ -44,4 +44,6 @@ The following enumerates revisions to the monitor before tracking in this partic
  * 2023-12-18 J. Chapman   Ported to modified WCC3 A68 cross-assembler
  * 2023-12-24 J. Chapman   General cleanup, no program changes
 
+Original work is Copyright (c) 2011 Martin Eberhard. Modifications are Copyright (c) 2023 Glitch Works, LLC and are released under the GNU GPL v3.
+
 `MTEST4` was ported to assemble with a modified version of Warren C. Colley III's `A68` cross-assembler ([Glitch Works modified version](https://github.com/glitchwrks/a68/), [Herb Johnson's version](https://www.retrotechnology.com/restore/a68.html)). MFE's original version was written to assemble with PseudoCode's A68.com, a DOS-based cross assembler for the MC6800. Porting to `A68` removed the workarounds for bugs in the PseudoCode assembler -- e.g. not correctly using direct addressing mode for some instructions.
