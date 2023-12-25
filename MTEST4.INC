@@ -1,9 +1,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;MTEST4 -- Altair 680 Memory Test Program
+;MTEST4 -- Memory Test for Motorola 6800
 ;
-;This program tests a range of Altair 680 memory, specified
-;by the user on the console. It can relocate itself anywhere
-;outside of page 0.
+;This program tests a range of memory, specified by the user
+;on the console. It can relocate itself anywhere outside of 
+;page 0.
 ;
 ;Relocation is accomplished through a small mover program,
 ;which prompts the user for the desired relocation base
@@ -12,12 +12,11 @@
 ;the mover is no longer required, so page 0 memory can be
 ;tested.
 ;
+;See machine-specific source for features/caveats specific
+;to a given platform.
+;
 ;See README.md in the project root for more information on
 ;history, inner workings, building, etc.
-;
-;BEWARE! The current revision cannot test all of page 0
-;since it uses the MITS ROM monitor I/O routines, which need
-;some page 0 variables to operate!
 ;
 ;Copyright (c) 2011 Martin Eberhard
 ;Copyright (c) 2023 Glitch Works, LLC
@@ -37,25 +36,6 @@ MAXERS	equ	64		;Max number of errors before we quit
 CTRLC	equ	03H		;Control+C
 CR	equ	0DH		;Carriage return
 LF	equ	0AH		;Line feed
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;PROM Monitor Equates
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-INCH	equ	0FF00H		;Get char from console in A
-OUT2H	equ	0FF6DH		;Print A to console in hex, clobber B
-OUTCH	equ	0FF81H		;Print char in B on console
-OUTS	equ	0FF82H		;Print a space on the console
-RESET	equ	0FFD8H		;Cold start
-ECHO	equ	0F3H		;PROM monitor echo flag
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;Start of actual object code
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-	CPU	6800		;Use only M6800 opcodes
-
-	ORG	ECHO		;Disable echo during loading
-	DB	80H
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Page 0 variables for mover
@@ -302,7 +282,7 @@ INHEX1:	INC	ERRCNT-VBASE, X	;Flag error
 
 INHEX2:	ABA			;Combine B with high digit in A
 	RTS
-INHEX3:	JMP	RESET		;Abort to ROM monitor
+INHEX3:	JMP	MONIT		;Abort to ROM monitor
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;GPARMS -- Print program addresses and get test parameters
@@ -678,7 +658,7 @@ EXIT:	BSR	PRINTC		;Print with preceeding CR LF
 	LDAB	#DONMSG-VBASE
 	BSR	PRINTB		;Print final message
 
-	JMP	RESET		;Return to ROM monitor
+	JMP	MONIT		;Return to ROM monitor
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;GETVB -- Get the value of VBASE into X
@@ -712,7 +692,7 @@ ERRMS1:	db	"ERR AT", 0
 ERRMS2:	db	" WROTE:", 0
 ERRMS3:	db	" READ:", 0
 DONMSG:	db	" ERRORS"	;Fall into NULMSG
-NULMSG:	db	80H, 80H, 0	;NULLs protect for ACIA RESET
+NULMSG:	db	80H, 80H, 0	;NULLs protect for ACIA reset
 MORMSG:	db	"> ", 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -752,7 +732,7 @@ PASSNO:	ds	1	;Current pass number
 ;MOVER -- Little Code Mover
 ;
 ;This routine copies code to a new location. It tests for
-;good writes, and aborts to RESET if not. It gets put in
+;good writes, and aborts to MONIT if not. It gets put in
 ;page 0 before running.
 ;
 ;This routine must be here so that it is close to VBASE.
@@ -775,7 +755,7 @@ MOVER1:	LDX	MSOURC	;Get a source byte
 	STAA	0, X
 
 	CMPA	0, X	;Make sure it wrote, abort if not
-	BNE	RESET+MOVER-EXEMOV
+	BNE	MONIT+MOVER-EXEMOV
 
 	BSR	MOVER3	;bump and save pointer
 	STX	MDEST
@@ -793,11 +773,3 @@ MOVER3:	TSTB		;Test contents of B
 	DEX		;B = 1, decrement X
 	RTS
 MOVEND:
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;Turn character echo on after loading
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ORG	ECHO
-	db	0
-
-	END

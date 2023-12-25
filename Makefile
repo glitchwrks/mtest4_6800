@@ -6,7 +6,7 @@ RM		= rm
 all: altair680
 
 altair680:
-	$(ASM) MTEST4.ASM -s MTEST4.S -l MTEST4.PRN
+	$(ASM) MTEST680.ASM -s MTEST680.S -l MTEST680.PRN
 
 clean:
 	$(RM) $(RMFLAGS) *.S *.PRN
